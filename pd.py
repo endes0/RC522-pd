@@ -71,16 +71,34 @@ class Decoder(srd.Decoder):
     def putb(self, data):
         self.put(self.ss_block, self.es_block, self.out_ann, data)
 
-    def putregb(self, name, page, data, isread):
+    def putregb(self, name, page, data, isread, flagsinfo=""):
         offset = 0
         if isread:
             offset = self.read_reg_offset
-        self.putb([page + offset, [f"{data}: 0x{data:02X}"]])
+        self.putb([page + offset, [f"{name}: 0x{data:02X}({flagsinfo})"]])
 
     # PAGE 0
 
     def handle_reg_0x01(self, databyte, read):
-        self.putregb("CommandReg", 0, databyte, read)
+        isPowerDown = (databyte & 0x10) != 0
+        isRcvOff = (databyte & 0x20) != 0
+        command = (databyte & 0x0F)
+
+        command_str = {
+            0x00: "Idle",
+            0x01: "Mem",
+            0x02: "GenerateRandomID",
+            0x03: "CalcCRC",
+            0x04: "Transmit",
+            0x07: "NoCmdChange",
+            0x08: "Receive",
+            0x0C: "Transceive",
+            0x0E: "MFAuthent",
+            0x0F: "SoftReset"
+        }
+        command_str = command_str.get(command, "Unknown")
+
+        self.putregb("CommandReg", 0, databyte, read, f"Command: {command_str} PowerDown: {isPowerDown} RcvOff: {isRcvOff}")
 
     def handle_reg_0x02(self, databyte, read):
         self.putregb("ComIEnReg", 0, databyte, read)
@@ -166,8 +184,72 @@ class Decoder(srd.Decoder):
     def handle_reg_0x22(self, databyte, read):
         self.putregb("CRCResultRegL", 2, databyte, read)
 
-    def handle_reg_0x23(self, databyte, read):
+    def handle_reg_0x24(self, databyte, read):
         self.putregb("ModWidthReg", 2, databyte, read)
+
+    def handle_reg_0x26(self, databyte, read):
+        self.putregb("RFCfgReg", 2, databyte, read)
+
+    def handle_reg_0x27(self, databyte, read):
+        self.putregb("GsNReg", 2, databyte, read)
+
+    def handle_reg_0x28(self, databyte, read):
+        self.putregb("CWGsCfgReg", 2, databyte, read)
+    
+    def handle_reg_0x29(self, databyte, read):
+        self.putregb("ModGsCfgReg", 2, databyte, read)
+    
+    def handle_reg_0x2A(self, databyte, read):
+        self.putregb("TModeReg", 2, databyte, read)
+    
+    def handle_reg_0x2B(self, databyte, read):
+        self.putregb("TPrescalerReg", 2, databyte, read)
+    
+    def handle_reg_0x2C(self, databyte, read):
+        self.putregb("TReloadRegH", 2, databyte, read)
+    
+    def handle_reg_0x2D(self, databyte, read):
+        self.putregb("TReloadRegL", 2, databyte, read)
+    
+    def handle_reg_0x2E(self, databyte, read):
+        self.putregb("TCounterValRegH", 2, databyte, read)
+    
+    def handle_reg_0x2F(self, databyte, read):
+        self.putregb("TCounterValRegL", 2, databyte, read)
+
+    # PAGE 3
+    def handle_reg_0x31(self, databyte, read):
+        self.putregb("TestSel1Reg", 3, databyte, read)
+    
+    def handle_reg_0x32(self, databyte, read):
+        self.putregb("TestSel2Reg", 3, databyte, read)
+
+    def handle_reg_0x33(self, databyte, read):
+        self.putregb("TestPinEnReg", 3, databyte, read)
+
+    def handle_reg_0x34(self, databyte, read):
+        self.putregb("TestPinValueReg", 3, databyte, read)
+
+    def handle_reg_0x35(self, databyte, read):  
+        self.putregb("TestBusReg", 3, databyte, read)
+
+    def handle_reg_0x36(self, databyte, read):
+        self.putregb("AutoTestReg", 3, databyte, read)
+
+    def handle_reg_0x37(self, databyte, read):
+        self.putregb("VersionReg", 3, databyte, read)
+
+    def handle_reg_0x38(self, databyte, read):
+        self.putregb("AnalogTestReg", 3, databyte, read)
+    
+    def handle_reg_0x39(self, databyte, read):
+        self.putregb("TestDAC1Reg", 3, databyte, read)
+
+    def handle_reg_0x3A(self, databyte, read):
+        self.putregb("TestDAC2Reg", 3, databyte, read)
+
+    def handle_reg_0x3B(self, databyte, read):
+        self.putregb("TestADCReg", 3, databyte, read)
 
     def handle_reg_write(self, databyte):
         if len(self.writebuf) < 2:
