@@ -19,26 +19,36 @@
 
 import sigrokdecode as srd
 
+
+
 class Decoder(srd.Decoder):
     api_version = 3
     id = 'rc522'
     name = 'rc522'
     longname = 'rc522'
-    desc = 'Nintendo Wii Nunchuk controller protocol.'
+    desc = 'Mifare MRC522 NFC protocol.'
     license = 'gplv2+'
     inputs = ['i2c']
     outputs = []
     tags = ['Sensor']
     annotations = \
-        tuple(('reg-w-0x%02X' % i, 'Write Register 0x%02X' % i) for i in range(6)) + tuple(('reg-r-0x%02X' % i, 'Read Register 0x%02X' % i) for i in range(6)) + (
+    (
+        ('p0', 'P0: Command and status'),
+        ('p1', 'P1: Command'),
+        ('p2', 'P2: Configuration'),
+        ('p3', 'P3: Test register'),
+        ('p0W', 'P0: Command and status'),
+        ('p1w', 'P1: Command'),
+        ('p2w', 'P2: Configuration'),
+        ('p3w', 'P3: Test register'),
         ('summary', 'Summary'),
         ('warnings', 'Warnings'),
     )
     annotation_rows = (
-        ('wregs', 'Write Registers', tuple(range(6))),
-        ('rregs', 'Read Registers', tuple(range(6, 12))),
-        ('summary', 'Summary', (12,)),
-        ('warnings', 'Warnings', (13,)),
+        ('wregs', 'Write Registers', tuple(range(4))),
+        ('rregs', 'Read Registers', tuple(range(4, 8))),
+        ('summary', 'Summary', (8,)),
+        ('warnings', 'Warnings', (9,)),
     )
 
     def __init__(self):
@@ -46,13 +56,11 @@ class Decoder(srd.Decoder):
 
     def reset(self):
         self.state = 'IDLE'
-        #self.sx = self.sy = self.ax = self.ay = self.az = self.bz = self.bc = -1
-        #self.databytecount = 0
         self.reg = 0x00
         self.ss = self.es = self.ss_block = self.es_block = 0
         self.writebuf = []
         self.readbuf = []
-        self.read_reg_offset = 6
+        self.read_reg_offset = 4
 
     def start(self):
         self.out_ann = self.register(srd.OUTPUT_ANN)
@@ -63,106 +71,107 @@ class Decoder(srd.Decoder):
     def putb(self, data):
         self.put(self.ss_block, self.es_block, self.out_ann, data)
 
-    def putd(self, bit1, bit2, data):
-        self.put(self.bits[bit1][1], self.bits[bit2][2], self.out_ann, data)
+    def putregb(self, name, page, data, isread):
+        offset = 0
+        if isread:
+            offset = self.read_reg_offset
+        self.putb([page + offset, [f"{data}: 0x{data:02X}"]])
+
+    # PAGE 0
 
     def handle_reg_0x01(self, databyte, read):
+        self.putregb("CommandReg", 0, databyte, read)
 
-        self.putb([0 + self.read_reg_offset if read else 0, ['CommandReg: 0x%02X' % databyte]])
+    def handle_reg_0x02(self, databyte, read):
+        self.putregb("ComIEnReg", 0, databyte, read)
+    
+    def handle_reg_0x03(self, databyte, read):
+        self.putregb("DivIEnReg", 0, databyte, read)
+    
+    def handle_reg_0x04(self, databyte, read):
+        self.putregb("ComIrqReg", 0, databyte, read)
+
+    def handle_reg_0x05(self, databyte, read):
+        self.putregb("DivIrqReg", 0, databyte, read)
+    
+    def handle_reg_0x06(self, databyte, read):
+        self.putregb("ErrorReg", 0, databyte, read)
+    
+    def handle_reg_0x07(self, databyte, read):
+        self.putregb("Status1Reg", 0, databyte, read)
 
     def handle_reg_0x08(self, databyte, read):
-
-        self.putb([0 + self.read_reg_offset if read else 0, ['Status2Reg: 0x%02X' % databyte]])
+        self.putregb("Status2Reg", 0, databyte, read)
 
     def handle_reg_0x09(self, databyte, read):
+        self.putregb("FIFODataReg", 0, databyte, read)
 
-        self.putb([0 + self.read_reg_offset if read else 0, ['FIFODataReg: 0x%02X' % databyte]])
+    def handle_reg_0x0A(self, databyte, read):
+        self.putregb("FIFOLevelReg", 0, databyte, read)
+    
+    def handle_reg_0x0B(self, databyte, read):
+        self.putregb("WaterLevelReg", 0, databyte, read)
 
-    # def handle_reg_0x00(self, databyte):
-    #     self.ss_block = self.ss
-    #     self.sx = databyte
-    #     self.putx([0, ['Analog stick X position: 0x%02X' % self.sx,
-    #                    'SX: 0x%02X' % self.sx]])
+    def handle_reg_0x0C(self, databyte, read):
+        self.putregb("ControlReg", 0, databyte, read)
+    
+    def handle_reg_0x0D(self, databyte, read):
+        self.putregb("BitFramingReg", 0, databyte, read)
+    
+    def handle_reg_0x0E(self, databyte, read):
+        self.putregb("CollReg", 0, databyte, read)
 
-    # def handle_reg_0x01(self, databyte):
-    #     self.sy = databyte
-    #     self.putx([1, ['Analog stick Y position: 0x%02X' % self.sy,
-    #                    'SY: 0x%02X' % self.sy]])
+    # PAGE 1
 
-    # def handle_reg_0x02(self, databyte):
-    #     self.ax = databyte << 2
-    #     self.putx([2, ['Accelerometer X value bits[9:2]: 0x%03X' % self.ax,
-    #                    'AX[9:2]: 0x%03X' % self.ax]])
+    def handle_reg_0x11(self, databyte, read):
+        self.putregb("ModeReg", 1, databyte, read)
 
-    # def handle_reg_0x03(self, databyte):
-    #     self.ay = databyte << 2
-    #     self.putx([3, ['Accelerometer Y value bits[9:2]: 0x%03X' % self.ay,
-    #                    'AY[9:2]: 0x%03X' % self.ay]])
+    def handle_reg_0x12(self, databyte, read):
+        self.putregb("TxModeReg", 1, databyte, read)
+    
+    def handle_reg_0x13(self, databyte, read):
+        self.putregb("RxModeReg", 1, databyte, read)
+    
+    def handle_reg_0x14(self, databyte, read):
+        self.putregb("TxControlReg", 1, databyte, read)
 
-    # def handle_reg_0x04(self, databyte):
-    #     self.az = databyte << 2
-    #     self.putx([4, ['Accelerometer Z value bits[9:2]: 0x%03X' % self.az,
-    #                    'AZ[9:2]: 0x%03X' % self.az]])
+    def handle_reg_0x15(self, databyte, read):
+        self.putregb("TxASKReg", 1, databyte, read)
 
-    # def handle_reg_0x05(self, databyte):
-    #     self.es_block = self.es
-    #     self.bz = (databyte & (1 << 0)) >> 0 # Bits[0:0]
-    #     self.bc = (databyte & (1 << 1)) >> 1 # Bits[1:1]
-    #     ax_rest = (databyte & (3 << 2)) >> 2 # Bits[3:2]
-    #     ay_rest = (databyte & (3 << 4)) >> 4 # Bits[5:4]
-    #     az_rest = (databyte & (3 << 6)) >> 6 # Bits[7:6]
-    #     self.ax |= ax_rest
-    #     self.ay |= ay_rest
-    #     self.az |= az_rest
+    def handle_reg_0x16(self, databyte, read):
+        self.putregb("TxSelReg", 1, databyte, read)
 
-    #     # self.putx([5, ['Register 5', 'Reg 5', 'R5']])
+    def handle_reg_0x17(self, databyte, read):
+        self.putregb("RxSelReg", 1, databyte, read)
 
-    #     s = '' if (self.bz == 0) else 'not '
-    #     self.putd(0, 0, [6, ['Z: %spressed' % s, 'BZ: %d' % self.bz]])
+    def handle_reg_0x18(self, databyte, read):
+        self.putregb("RxThresholdReg", 1, databyte, read)
 
-    #     s = '' if (self.bc == 0) else 'not '
-    #     self.putd(1, 1, [7, ['C: %spressed' % s, 'BC: %d' % self.bc]])
+    def handle_reg_0x19(self, databyte, read):
+        self.putregb("DemodReg", 1, databyte, read)
+    
+    def handle_reg_0x1C(self, databyte, read):
+        self.putregb("MfTxReg", 1, databyte, read)
 
-    #     self.putd(3, 2, [8, ['Accelerometer X value bits[1:0]: 0x%X' % ax_rest,
-    #                          'AX[1:0]: 0x%X' % ax_rest]])
+    def handle_reg_0x1D(self, databyte, read):
+        self.putregb("MfRxReg", 1, databyte, read)
 
-    #     self.putd(5, 4, [9, ['Accelerometer Y value bits[1:0]: 0x%X' % ay_rest,
-    #                          'AY[1:0]: 0x%X' % ay_rest]])
+    def handle_reg_0x1F(self, databyte, read):
+        self.putregb("SerialSpeedReg", 1, databyte, read)
+    
+    # PAGE 2
+    def handle_reg_0x21(self, databyte, read):
+        self.putregb("CRCResultRegM", 2, databyte, read)
+    
+    def handle_reg_0x22(self, databyte, read):
+        self.putregb("CRCResultRegL", 2, databyte, read)
 
-    #     self.putd(7, 6, [10, ['Accelerometer Z value bits[1:0]: 0x%X' % az_rest,
-    #                           'AZ[1:0]: 0x%X' % az_rest]])
-
-    #     self.reg = 0x00
-
-    def output_full_block_if_possible(self):
-        # For now, only output summary annotations if all values are available.
-        t = (self.sx, self.sy, self.ax, self.ay, self.az, self.bz, self.bc)
-        if -1 in t:
-            return
-        bz = 'pressed' if self.bz == 0 else 'not pressed'
-        bc = 'pressed' if self.bc == 0 else 'not pressed'
-        s = 'Analog stick: %d/%d, accelerometer: %d/%d/%d, Z: %s, C: %s' % \
-            (self.sx, self.sy, self.ax, self.ay, self.az, bz, bc)
-        self.putb([13, [s]])
+    def handle_reg_0x23(self, databyte, read):
+        self.putregb("ModWidthReg", 2, databyte, read)
 
     def handle_reg_write(self, databyte):
-        #self.putx([11, ['Nunchuk write: 0x%02X' % databyte]])
         if len(self.writebuf) < 2:
             self.writebuf.append(databyte)
-
-    # def output_init_seq(self):
-    #     if len(self.init_seq) != 2:
-    #         self.putb([14, ['Init sequence was %d bytes long (2 expected)' % \
-    #                   len(self.init_seq)]])
-    #         return
-
-    #     if self.init_seq != [0x40, 0x00]:
-    #         self.putb([14, ['Unknown init sequence (expected: 0x40 0x00)']])
-    #         return
-
-    #     # TODO: Detect Nunchuk clones (they have different init sequences).
-
-    #     self.putb([12, ['Initialize Nunchuk', 'Init Nunchuk', 'Init', 'I']])
 
     def decode(self, ss, es, data):
         cmd, databyte = data
@@ -195,12 +204,11 @@ class Decoder(srd.Decoder):
                 self.es_block = es
 
                 #check if attr exists
-                if hasattr(self, 'handle_reg_0x%02x' % self.reg):
-                    handle_reg = getattr(self, 'handle_reg_0x%02x' % self.reg)
+                if hasattr(self, 'handle_reg_0x%02X' % self.reg):
+                    handle_reg = getattr(self, 'handle_reg_0x%02X' % self.reg)
                     handle_reg(self.readbuf[0], True)
-                # self.output_full_block_if_possible()
-                # self.sx = self.sy = self.ax = self.ay = self.az = -1
-                # self.bz = self.bc = -1
+                else:
+                    self.putb([9, ['Ignoring read to: %02X' % self.reg]])
 
                 self.readbuf = []
                 self.state = 'IDLE'
@@ -214,15 +222,18 @@ class Decoder(srd.Decoder):
                 self.es_block = es
                 #self.output_init_seq()
                 
-                if len(self.writebuf) == 1:
+                if len(self.writebuf) > 0:
                     self.reg = self.writebuf[0]
-                elif len(self.writebuf) == 2:
+
+                if len(self.writebuf) == 2:
                     #check if attr exists
-                    if hasattr(self, 'handle_reg_0x%02x' % self.reg):
-                        handle_reg = getattr(self, 'handle_reg_0x%02x' % self.reg)
+                    if hasattr(self, 'handle_reg_0x%02X' % self.reg):
+                        handle_reg = getattr(self, 'handle_reg_0x%02X' % self.reg)
                         handle_reg(self.writebuf[1], False)
-                else:
-                    self.putb([14, ['Ignoring write: %s' % self.writebuf]])
+                    else:
+                        self.putb([9, ['Ignoring write to: %02X' % self.reg]])
+                elif len(self.writebuf) > 2 or len(self.writebuf) == 0:
+                    self.putb([9, ['Ignoring write: %s' % self.writebuf]])
 
 
                 self.writebuf = []
